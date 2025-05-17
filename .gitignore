@@ -58,3 +58,4 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 wa-logs.txt
 
 baileys_auth_info
+auth_info_baileys
