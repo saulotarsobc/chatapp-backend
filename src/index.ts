@@ -1,12 +1,15 @@
 import express from 'express';
-import { WhatsappBot } from './whatsapp';
+import { InstancesController } from './instances/instances.controller';
+import { bot } from './whatsapp';
 
-const bot = new WhatsappBot();
-bot.iniciar();
+const app = express();
+app.use(express.json());
 
+// Routes
+app.use('/instances', InstancesController);
 
 const bootstrap = async () => {
-    const app = express();
+    await bot.start();
 
     app.listen(3000, () => {
         console.log('Server is running on port 3000');

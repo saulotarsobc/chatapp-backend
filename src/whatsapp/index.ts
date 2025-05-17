@@ -1,38 +1,80 @@
-import makeWASocket, { fetchLatestBaileysVersion, makeCacheableSignalKeyStore, useMultiFileAuthState } from "baileys";
-import logger from "baileys/lib/Utils/logger";
-import { BEvents } from "../enums";
+import makeWASocket, {
+    Contact,
+    fetchLatestBaileysVersion,
+    makeCacheableSignalKeyStore,
+    proto,
+    useMultiFileAuthState,
+    WASocket
+} from "baileys";
+import qrcode from 'qrcode-terminal';
 
 export class WhatsappBot {
-    private sock: ReturnType<typeof makeWASocket> | null = null;
+    private sock: WASocket | null = null;
+    private qrCode: string | null = null;
+    private isConnected = false;
+    private me?: Contact;
+    private account?: proto.IADVSignedDeviceIdentity;
+    private registered?: boolean;
 
-    async iniciar() {
+    async start() {
         const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
-        const { version, isLatest } = await fetchLatestBaileysVersion();
-
-        console.log(`\n >>> using WA v${version.join('.')}, isLatest: ${isLatest}\n`);
+        const { version } = await fetchLatestBaileysVersion();
 
         this.sock = makeWASocket({
             version,
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, logger),
+                keys: makeCacheableSignalKeyStore(state.keys),
             },
         });
 
-        this.sock.ev.on(BEvents.CREDS_UPDATE, async () => {
-            await saveCreds();
+        this.sock.ev.on('creds.update', ({ me, account, registered }) => {
+            saveCreds();
+            this.me = me || undefined;
+            this.account = account || undefined;
+            this.registered = registered;
         });
 
-        this.sock.ev.on(BEvents.CONNECTION_UPDATE, ({ connection }) => {
-            if (connection === 'open') console.log('✅ Conectado!');
-        });
+        this.sock.ev.on('connection.update', ({ connection, qr, lastDisconnect }) => {
+            if (qr) {
+                this.qrCode = qr;
+                console.log('QR Code:', qr);
+                qrcode.generate(qr, { small: true });
+            };
 
-        this.sock.ev.on(BEvents.MESSAGES_UPSERT, async ({ messages, type, requestId }) => {
-            console.log(JSON.stringify({ messages, type, requestId }));
+            if (connection === 'open') {
+                console.log('✅ Conectado!');
+                this.isConnected = true;
+            }
+
+            if (connection === 'close') {
+                const reason = lastDisconnect?.error?.message || 'Desconhecido';
+                console.log(`❌ Conexão fechada. Motivo: ${reason}`);
+                this.isConnected = false;
+            }
         });
+    }
+
+    async connect(): Promise<{ qr?: string | null }> {
+        if (this.isConnected) {
+            return { qr: this.qrCode };
+        }
+
+        if (!this.isConnected && this.qrCode) {
+            return { qr: this.qrCode };
+        }
+
+        await this.start();
+        return { qr: this.qrCode };
+    }
+
+    getStatus(): any {
+        return {
+            isConnected: this.isConnected,
+            me: this.me,
+            account: this.account,
+        };
     }
 }
 
-// const bot = new WhatsappBot();
-// bot.iniciar();
-
+export const bot = new WhatsappBot();
