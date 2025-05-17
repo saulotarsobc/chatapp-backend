@@ -1,33 +1,16 @@
-import makeWASocket, { fetchLatestBaileysVersion, makeCacheableSignalKeyStore, useMultiFileAuthState } from "baileys";
-import logger from "baileys/lib/Utils/logger";
+import express from 'express';
+import { WhatsappBot } from './whatsapp';
 
-async function iniciarBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info')
-    const { version, isLatest } = await fetchLatestBaileysVersion();
+const bot = new WhatsappBot();
+bot.iniciar();
 
-    console.log(`\n >>> using WA v${version.join('.')}, isLatest: ${isLatest}\n`)
 
-    const sock = makeWASocket({
-        version,
-        logger,
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, logger),
-        },
-    });
+const bootstrap = async () => {
+    const app = express();
 
-    sock.ev.on('creds.update', async () => {
-        await saveCreds();
-    });
-
-    sock.ev.on('connection.update', ({ connection }) => {
-        if (connection === 'open') console.log('✅ Conectado!')
-    });
-
-    sock.ev.on('messages.upsert', async ({ messages, type, requestId }) => {
-        console.log(JSON.stringify({ messages, type, requestId }))
+    app.listen(3000, () => {
+        console.log('Server is running on port 3000');
     });
 }
 
-iniciarBot()
-
+bootstrap();
