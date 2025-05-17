@@ -1,5 +1,6 @@
 import NodeCache from '@cacheable/node-cache';
 import makeWASocket, {
+    Contact,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
     proto,
@@ -8,21 +9,16 @@ import makeWASocket, {
     WAMessageKey
 } from 'baileys';
 import P from 'pino';
-import QRCode, { QRCodeToDataURLOptions } from 'qrcode';
-import readline from 'readline';
-
-const optsQrcode: QRCodeToDataURLOptions = {
-    margin: 3,
-    scale: 4,
-    errorCorrectionLevel: 'H',
-    color: { light: '#ffffff', dark: "#7498167" },
-};
+import QRCode from 'qrcode';
+import { codeOptions } from '../contants';
 
 export class WhatsAppBot {
     private logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination('./wa-logs.txt'))
     private msgRetryCounterCache = new NodeCache()
-    private rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     private lastQrcode: string = '';
+    private sock?: ReturnType<typeof makeWASocket>;
+    private me?: Contact;
+    private isOnline = false;
 
     constructor() {
         this.logger.level = 'trace';
@@ -37,7 +33,7 @@ export class WhatsAppBot {
         const { version, isLatest } = await fetchLatestBaileysVersion();
         console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`);
 
-        const sock = makeWASocket({
+        this.sock = makeWASocket({
             version,
             logger: this.logger,
             auth: {
@@ -49,18 +45,37 @@ export class WhatsAppBot {
             getMessage: this.getMessage,
         });
 
-        sock.ev.on('connection.update', async ({ qr }) => {
+        /* Events */
+        this.sock.ev.on('connection.update', async ({ qr, connection, isOnline }) => {
             if (qr) {
-                const qrcode = await QRCode.toDataURL(qr, optsQrcode);;
-                this.lastQrcode = qrcode;
-                console.log(await QRCode.toString(qr))
+                this.lastQrcode = await QRCode.toDataURL(qr, codeOptions)
+
+                // QR visual no terminal
+                console.log(await QRCode.toString(qr, { type: 'terminal' }))
+
+                // Base64 no terminal
+                console.log('\n🖼️ QR Code em base64 (DataURL):')
+                console.log(this.lastQrcode)
             }
+
+            if (connection == 'close') {
+                console.log('❌ Connection closed');
+            }
+
+            if (connection == 'open') {
+                console.log('✅ Connection opened');
+            }
+
+            if (connection == 'connecting') {
+                console.log('🔄 Connecting...');
+            }
+
+            this.isOnline = isOnline || false;
         });
 
-        sock.ev.on("creds.update", async () => { await saveCreds() });
-
-        return sock;
+        this.sock.ev.on("creds.update", async ({ me }) => { await saveCreds() });
     }
+
 
     public async connect() {
         return {
@@ -69,7 +84,10 @@ export class WhatsAppBot {
     }
 
     public getStatus() {
-        return 'connected'
+        return {
+            isOnline: this.isOnline,
+            me: this.me,
+        };
     }
 }
 
