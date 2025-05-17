@@ -3,6 +3,7 @@ import { Boom } from '@hapi/boom'
 import makeWASocket, { AnyMessageContent, BinaryInfo, delay, DisconnectReason, encodeWAM, fetchLatestBaileysVersion, getAggregateVotesInPollMessage, isJidNewsletter, makeCacheableSignalKeyStore, proto, useMultiFileAuthState, WAMessageContent, WAMessageKey } from 'baileys'
 import fs from 'fs'
 import P from 'pino'
+import qrcode from 'qrcode-terminal'
 import readline from 'readline'
 
 const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination('./wa-logs.txt'))
@@ -39,6 +40,13 @@ const startSock = async () => {
         const code = await sock.requestPairingCode(phoneNumber)
         console.log(`Pairing code: ${code}`)
     }
+
+    // Adiciona handler para o QR Code
+    sock.ev.on('connection.update', ({ qr }) => {
+        if (qr) {
+            qrcode.generate(qr, { small: true })
+        }
+    })
 
     const sendMessageWTyping = async (msg: AnyMessageContent, jid: string) => {
         await sock.presenceSubscribe(jid)
